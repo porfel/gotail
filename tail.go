@@ -15,12 +15,14 @@ type Tail struct {
 	file         *os.File
 	stat         os.FileInfo
 	reader       *bufio.Reader
+	rel          bool
 }
 
 func NewTail(fileName string, offset int64, pollInterval time.Duration) (tail Tail, err error) {
 	tail.fileName = fileName
 	tail.pollInterval = pollInterval
 	tail.file, err = os.Open(fileName)
+	tail.rel = false
 	if err != nil {
 		return tail, fmt.Errorf("failed to open file %s: %s", fileName, err)
 	}
@@ -45,6 +47,11 @@ func NewTail(fileName string, offset int64, pollInterval time.Duration) (tail Ta
 func (tail *Tail) ReadLine() string {
 	var linePart string
 	for {
+		if tail.rel {
+			log.Println("tailer: Return empty line")
+			tail.rel = false
+			return ""
+		}
 		line, err := tail.reader.ReadString('\n')
 		if err == nil {
 			if linePart != "" {
@@ -58,8 +65,12 @@ func (tail *Tail) ReadLine() string {
 	}
 }
 
+// Request for next or current call to ReadLine returns the empty line
+func (tail *Tail) RequestEmptyLine() {
+	tail.rel = true
+}
+
 func (tail *Tail) waitForChanges() {
-	log.Printf("waiting for changes %s", tail.fileName)
 	var stat os.FileInfo
 	var err error
 	for {
@@ -90,7 +101,9 @@ func (tail *Tail) waitForChanges() {
 			break
 		}
 		if stat.Size() > tail.stat.Size() {
-			log.Printf("file was appended %s", tail.fileName)
+			break
+		}
+		if tail.rel {
 			break
 		}
 	}

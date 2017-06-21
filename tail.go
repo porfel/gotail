@@ -16,7 +16,6 @@ type Tail struct {
 	stat         os.FileInfo
 	reader       *bufio.Reader
 	rel          bool
-	wstop        bool
 }
 
 func NewTail(fileName string, offset int64, pollInterval time.Duration) (tail Tail, err error) {
@@ -51,12 +50,6 @@ func (tail *Tail) ReadLine() string {
 		if tail.rel {
 			log.Println("tailer: Return empty line")
 			tail.rel = false
-			WAITER:
-			for {
-				if !tail.wstop {
-					break WAITER
-				}
-			}
 			return ""
 		}
 		line, err := tail.reader.ReadString('\n')
@@ -75,7 +68,6 @@ func (tail *Tail) ReadLine() string {
 // Request for next or current call to ReadLine returns the empty line
 func (tail *Tail) RequestEmptyLine() {
 	tail.rel = true
-	tail.wstop = true
 }
 
 func (tail *Tail) waitForChanges() {
@@ -84,9 +76,8 @@ func (tail *Tail) waitForChanges() {
 	for {
 		time.Sleep(tail.pollInterval)
 		stat, err = os.Stat(tail.fileName)
-		if tail.wstop {
+		if tail.rel {
 			log.Println("tailer: stop cycle required")
-			tail.wstop = false
 			break
 		}
 		if err != nil {
